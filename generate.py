@@ -24,6 +24,7 @@ from defaults import get_cfg_defaults
 import lreq
 from PIL import Image
 import random
+from glob import glob
 
 
 lreq.use_implicit_lreq.set(True)
@@ -51,6 +52,7 @@ def sample(cfg, logger):
     mapping_tl = model.mapping_d
     mapping_fl = model.mapping_f
     dlatent_avg = model.dlatent_avg
+
 
     logger.info("Trainable parameters generator:")
     count_parameters(decoder)
@@ -93,17 +95,11 @@ def sample(cfg, logger):
         # x = torch.lerp(model.dlatent_avg.buff.data, x, coefs)
         return model.decoder(x, layer_count - 1, 1, noise=True)
 
-    path = cfg.DATASET.SAMPLES_PATH
     im_size = 2 ** (cfg.MODEL.LAYER_COUNT + 1)
 
-    def do_attribute_traversal(path, attrib_idx, start, end):
-        img = np.asarray(Image.open(path))
-        if img.shape[2] == 4:
-            img = img[:, :, :3]
-        im = img.transpose((2, 0, 1))
-        x = torch.tensor(np.asarray(im, dtype=np.float32), device='cpu', requires_grad=True).cuda() / 127.5 - 1.
-        if x.shape[0] == 4:
-            x = x[:3]
+    def do_attribute_traversal(x, attrib_idx, value):
+        # img = np.asarray(Image.open(path))
+
         factor = x.shape[2] // im_size
         if factor != 1:
             x = torch.nn.functional.avg_pool2d(x[None, ...], factor, factor)[0]
@@ -131,43 +127,46 @@ def sample(cfg, logger):
 
                 x_rec = decode(styles)
                 return x_rec
+    
+        W = latents + w0 * (attr0 + value)
+        im = update_image(W)[0]
 
-        traversal = []
+        return im
 
-        r = 7
-        inc = (end - start) / (r - 1)
+        
 
-        for i in range(r):
-            W = latents + w0 * (attr0 + start)
-            im = update_image(W)
+    cfg_labels = {
+        0 : "GENDER",
+        1 : "SMILE",
+        2 : "ATTRACTIVE",
+        3 : "WAVY_HAIR",
+        4 : "YOUNG",
+        10 : "BIG_LIPS",
+        11 : "BIG_NOSE",
+        17 : "CHUBBY",
+        19 : "GLASSES"
+    }
+    
+    template_images = list(sorted(glob(cfg.CUSTOM.IMAGE_PATH + '/*.png')))
+    for i, template_image in enumerate(template_images):
+        img = np.asarray(Image.open(template_image))
+        if img.shape[2] == 4:
+            img = img[:, :, :3]
+        img = img.transpose((2, 0, 1))
+        x = torch.tensor(np.asarray(img, dtype=np.float32), device='cpu', requires_grad=True).cuda() / 127.5 - 1.
+        if x.shape[0] == 4:
+            x = x[:3]
 
-            traversal.append(im)
-            attr0 += inc
-        res = torch.cat(traversal)
+        num_changes = 0
+        for attr_id, label in cfg_labels.items():
+            attr_value = eval(f"cfg.CUSTOM.{label}[{i}]") if len(eval(f"cfg.CUSTOM.{label}")) > i else None
+            if attr_value is not None:
+                num_changes += 1
+                x = do_attribute_traversal(x, attr_id, attr_value)
+        if num_changes == 0:
+            x = do_attribute_traversal(x, 1, 0)
+        save_image(x * 0.5 + 0.5, "data/face_gen/faces/face_gen_from_%s" % os.path.basename(template_image))
 
-        indices = [0, 1, 2, 3, 4, 10, 11, 17, 19]
-        labels = ["gender",
-                  "smile",
-                  "attractive",
-                  "wavy-hair",
-                  "young",
-                  "big_lips",
-                  "big_nose",
-                  "chubby",
-                  "glasses",
-                  ]
-        save_image(res * 0.5 + 0.5, "make_figures/output/%s/traversal_%s.jpg" % (
-            cfg.NAME, labels[indices.index(attrib_idx)]), pad_value=1)
-
-    do_attribute_traversal('dataset_samples/faces/realign_custom1024x1024/00000.png', 0, 0, -34)
-    do_attribute_traversal('dataset_samples/faces/realign_custom1024x1024/00000.png', 1, 0, 30)
-    #do_attribute_traversal(path + '/00125.png', 1, -3, 15.0)
-    #do_attribute_traversal(path + '/00057.png', 3, -2, 30.0)
-    #do_attribute_traversal(path + '/00031.png', 4, -10, 30.0)
-    #do_attribute_traversal(path + '/00088.png', 10, -0.3, 30.0)
-    #do_attribute_traversal(path + '/00004.png', 11, -25, 20.0)
-    #do_attribute_traversal(path + '/00012.png', 17, -40, 40.0)
-    #do_attribute_traversal(path + '/00017.png', 19, 0, 30.0)
 
 
 if __name__ == "__main__":

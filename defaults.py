@@ -22,6 +22,18 @@ _C.NAME = ""
 _C.PPL_CELEBA_ADJUSTMENT = False
 _C.OUTPUT_DIR = "results"
 
+_C.CUSTOM = CN()
+_C.CUSTOM.IMAGE_PATH = 'data/face_gen_templates/'
+_C.CUSTOM.GENDER = [None]
+_C.CUSTOM.SMILE = [10, 10, 10]
+_C.CUSTOM.ATTRACTIVE = [None]
+_C.CUSTOM.WAVY_HAIR = [None]
+_C.CUSTOM.YOUNG = [None]
+_C.CUSTOM.BIG_LIPS = [None]
+_C.CUSTOM.BIG_NOSE = [None]
+_C.CUSTOM.CHUBBY = [None]
+_C.CUSTOM.GLASSES = [None]
+
 _C.DATASET = CN()
 _C.DATASET.PATH = 'celeba/data_fold_%d_lod_%d.pkl'
 _C.DATASET.PATH_TEST = ''
